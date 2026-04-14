@@ -1,0 +1,42 @@
+# SIRER - Système Intégré de Recensement des Retraités et Rentiers
+
+## Description Générale
+SIRER est une plateforme numérique sécurisée conçue pour centraliser et moderniser le recensement des retraités, rentiers et de leurs ayants droit. L'objectif principal est de constituer une base de données nationale fiable, de lutter contre la fraude et de faciliter la gestion administrative et le paiement des prestations.
+
+## Architecture Technique
+- **Backend** : Architecture Node.js (Express) avec Prisma ORM.
+- **Base de données** : SQLite (extensible), avec chiffrement AES-256 des données sensibles (Identité, contact, adresse).
+- **Frontend** : Interface moderne et réactive développée avec React et Vite.
+- **Sécurité** : Authentification par jetons JWT, gestion fine des accès par rôles et journalisation complète (Audit Log).
+
+## Fonctionnalités Principales
+
+### 1. Gestion des Bénéficiaires
+- **Recensement complet** : Saisie des informations d'identité, coordonnées et situation familiale.
+- **Catégorisation** : Distinction entre Retraités et Rentiers (incluant les ayants droit : Veufs/Veuves, Orphelins).
+- **Isolation des données** : Les agents non-administrateurs ne voient que les bénéficiaires qu'ils ont personnellement créés. L'administrateur conserve une vue globale.
+
+### 2. Gestion Documentaire et Numérisation
+- **Pièces jointes** : Attachement de documents officiels (Arrêtés de mise à la retraite, Décrets, Ordonnances, Compositions familiales, Certificats de décès, Actes de mariage/célibat, Attestations de résidence, Pièces d'identité, Actes de naissance, Attestations de fréquentation scolaire).
+- **Multi-source** : Importation de fichiers depuis l'ordinateur ou numérisation directe.
+- **Consultation** : Visualisation intégrée des documents (images/PDF) et téléchargement sécurisé.
+
+### 3. Biométrie et Identification
+- **Capture photo** : Prise de photo en direct via la caméra ou importation.
+- **Empreintes digitales** : Module de capture biométrique pour sécuriser l'enrôlement.
+- **Cartes de bénéficiaire** : Génération de cartes avec QR Code pour une vérification instantanée.
+
+### 4. Suivi des Orphelins et Études
+- **Contrôle de scolarité** : Suivi des orphelins poursuivant leurs études (seuils de 18 et 25 ans).
+- **Alertes et Suspension** : Détection automatique des expirations d'attestations et suspension intelligente des droits.
+
+### 5. Administration et Audit
+- **Gestion des utilisateurs** : Contrôle des accès (création, désactivation, suppression sécurisée) et réinitialisation de mots de passe.
+- **Journal d'audit** : Historique détaillé des actions avec possibilité de filtrage par date, utilisateur, entité ou action.
+- **Tableaux de bord** : Statistiques dynamiques et exports de rapports.
+
+## Rôles Utilisateurs
+- **Super Administrateur** : Rôle de niveau supérieur avec privilèges critiques, notamment la réinitialisation des mots de passe de tous les utilisateurs.
+- **Administrateur Central** : Accès global à toutes les provinces, gestion des utilisateurs, audit et suppression de données.
+- **Agent Provincial** : Gestion limitée aux bénéficiaires de sa province de rattachement.
+- **Agent de Recensement** : Uniquement autorisé à gérer ses propres enrôlements.

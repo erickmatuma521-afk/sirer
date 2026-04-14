@@ -1,0 +1,22 @@
+{
+  "name": "sirer",
+  "version": "1.0.0",
+  "description": "Système Intégré de Recensement des Retraités et Rentiers",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "vercel-build": "cd backend && npx prisma generate && cd ../frontend && npm run build",
+    "db:push": "cd backend && npx prisma db push",
+    "db:migrate": "cd backend && npx prisma migrate dev",
+    "db:migrate:deploy": "cd backend && npx prisma migrate deploy",
+    "db:seed": "cd backend && npx prisma db seed",
+    "postinstall": "cd backend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "prisma": "^7.7.0"
+  }
+}

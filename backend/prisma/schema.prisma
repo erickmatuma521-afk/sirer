@@ -1,0 +1,166 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                    String        @id @default(uuid())
+  email                 String        @unique
+  passwordHash          String
+  fullName              String
+  role                  String
+  provinceId            String?
+  isActive              Boolean       @default(true)
+  canAccessAllProvinces Boolean       @default(false)
+  lastLoginAt           DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  alertsResolved        Alert[]       @relation("ResolvedBy")
+  auditLogs             AuditLog[]
+  beneficiariesCreated  Beneficiary[] @relation("CreatedBy")
+  alertsCreated         Alert[]       @relation("CreatedByAlert")
+  province              Province?     @relation(fields: [provinceId], references: [id])
+}
+
+model Province {
+  id            String        @id @default(uuid())
+  code          String        @unique
+  name          String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  beneficiaries Beneficiary[]
+  users         User[]
+}
+
+model Beneficiary {
+  id                   String              @id @default(uuid())
+  nationalIdEncrypted  String
+  firstNameEncrypted   String
+  lastNameEncrypted    String
+  birthDate            DateTime
+  gender               String
+  type                 String
+  ayantDroitSubType    String?
+  status               String              @default("ACTIF")
+  provinceId           String
+  gradeId              String?
+  addressEncrypted     String?
+  phoneEncrypted       String?
+  emailEncrypted       String?
+  bankEncrypted        String?
+  institutionEncrypted String?
+  titulaireId          String?
+  photoData            String?
+  fingerprintData      String?
+  matricule            String?             @unique
+  poursuitEtudes       Boolean?
+  attestationEtudesAt  DateTime?
+  attestationExpiresAt DateTime?
+  isPaid               Boolean             @default(false)
+  paymentAmount        Float?
+  createdById          String
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  firstNameSearch      String?
+  lastNameSearch       String?
+  nationalIdHash       String?             @unique
+  alerts               Alert[]
+  auditLogs            AuditLog[]
+  createdBy            User                @relation("CreatedBy", fields: [createdById], references: [id])
+  titulaire            Beneficiary?        @relation("TitulaireRelation", fields: [titulaireId], references: [id])
+  ayantsDroit          Beneficiary[]       @relation("TitulaireRelation")
+  province             Province            @relation(fields: [provinceId], references: [id])
+  grade                Grade?              @relation(fields: [gradeId], references: [id])
+  cards                Card[]
+  documents            Document[]
+  suspensions          SuspensionHistory[]
+}
+
+model Grade {
+  id          String        @id @default(uuid())
+  name        String        @unique
+  grossSalary Float
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  beneficiaries Beneficiary[]
+}
+
+model Document {
+  id            String      @id @default(uuid())
+  beneficiaryId String
+  type          String
+  name          String
+  filePath      String
+  expiresAt     DateTime?
+  validatedAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  beneficiary   Beneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+}
+
+model Alert {
+  id             String      @id @default(uuid())
+  beneficiaryId  String
+  type           String
+  status         String      @default("OUVERTE")
+  title          String
+  description    String?
+  dueDate        DateTime?
+  createdById    String?
+  resolvedById   String?
+  resolvedAt     DateTime?
+  resolutionNote String?
+  metadata       String?
+  isReported     Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  createdBy      User?       @relation("CreatedByAlert", fields: [createdById], references: [id])
+  resolvedBy     User?       @relation("ResolvedBy", fields: [resolvedById], references: [id])
+  beneficiary    Beneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+}
+
+model Card {
+  id            String      @id @default(uuid())
+  beneficiaryId String
+  cardNumber    String      @unique
+  qrCodePayload String
+  expiresAt     DateTime
+  isRevoked     Boolean     @default(false)
+  issuedAt      DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  beneficiary   Beneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+}
+
+model SuspensionHistory {
+  id            String      @id @default(uuid())
+  beneficiaryId String
+  reason        String
+  effectiveAt   DateTime
+  decidedBy     String?
+  decisionNote  String?
+  createdAt     DateTime    @default(now())
+  beneficiary   Beneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id            String       @id @default(uuid())
+  userId        String?
+  beneficiaryId String?
+  action        String
+  entity        String
+  entityId      String?
+  oldValues     String?
+  newValues     String?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime     @default(now())
+  beneficiary   Beneficiary? @relation(fields: [beneficiaryId], references: [id])
+  user          User?        @relation(fields: [userId], references: [id])
+}
