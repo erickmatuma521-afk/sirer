@@ -9,13 +9,21 @@ export function setToken(token) {
   else localStorage.removeItem('sirer_token');
 }
 
+function isLoginPost(url, options) {
+  const m = (options.method || 'GET').toUpperCase();
+  return url === '/auth/login' && m === 'POST';
+}
+
 export async function api(url, options = {}) {
   const token = getToken();
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  // Ne pas envoyer un ancien Bearer sur /auth/login (évite tout effet de bord côté serveur / proxies)
+  if (token && !isLoginPost(url, options)) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   let res;
   try {
     res = await fetch(API_BASE + url, { ...options, headers });
@@ -28,6 +36,16 @@ export async function api(url, options = {}) {
     );
   }
   const data = await res.json().catch(() => ({}));
+
+  if (res.status === 401 && !isLoginPost(url, options)) {
+    setToken(null);
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.replace('/login?session=expired');
+    }
+    const detail = data.error || data.message || 'Session expirée. Veuillez vous reconnecter.';
+    throw new Error(detail);
+  }
+
   if (!res.ok) {
     const detail = data.error || data.message || res.statusText;
     throw new Error(detail || `Erreur ${res.status}`);

@@ -8,18 +8,47 @@ export async function requireAuth(req, res, next) {
   if (!token) {
     return res.status(401).json({ error: 'Non authentifié' });
   }
+
+  let decoded;
   try {
-    const decoded = jwt.verify(token, config.jwtSecret);
-    req.userId = decoded.userId;
-    req.userRole = decoded.role;
-    req.user = await prisma.user.findUnique({
+    decoded = jwt.verify(token, config.jwtSecret);
+  } catch (e) {
+    const name = e?.name || '';
+    if (name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Session expirée. Veuillez vous reconnecter.' });
+    }
+    if (name === 'JsonWebTokenError' || name === 'NotBeforeError') {
+      return res.status(401).json({ error: 'Token invalide. Veuillez vous reconnecter.' });
+    }
+    console.error('requireAuth JWT', e);
+    return res.status(500).json({ error: 'Erreur de vérification de session' });
+  }
+
+  req.userId = decoded.userId;
+  req.userRole = decoded.role;
+
+  let user;
+  try {
+    user = await prisma.user.findUnique({
       where: { id: req.userId },
       include: { province: true },
     });
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Token invalide ou expiré' });
+  } catch (e) {
+    console.error('requireAuth DB', e);
+    return res.status(503).json({
+      error: 'Impossible de joindre la base de données. Réessayez dans un instant.',
+    });
   }
+
+  if (!user) {
+    return res.status(401).json({ error: 'Session invalide : utilisateur introuvable.' });
+  }
+  if (!user.isActive) {
+    return res.status(401).json({ error: 'Compte désactivé.' });
+  }
+
+  req.user = user;
+  next();
 }
 
 export function requireRole(...allowedRoles) {
