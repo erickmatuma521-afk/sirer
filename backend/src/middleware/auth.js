@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { prisma } from '../lib/prisma.js';
+import { withDbRetry, isTransientDbError } from '../lib/dbRetry.js';
 
 export async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -29,15 +30,20 @@ export async function requireAuth(req, res, next) {
 
   let user;
   try {
-    user = await prisma.user.findUnique({
-      where: { id: req.userId },
-      include: { province: true },
-    });
+    user = await withDbRetry(() =>
+      prisma.user.findUnique({
+        where: { id: req.userId },
+        include: { province: true },
+      })
+    );
   } catch (e) {
     console.error('requireAuth DB', e);
-    return res.status(503).json({
-      error: 'Impossible de joindre la base de données. Réessayez dans un instant.',
-    });
+    if (isTransientDbError(e)) {
+      return res.status(503).json({
+        error: 'Impossible de joindre la base de données. Réessayez dans un instant.',
+      });
+    }
+    return res.status(500).json({ error: 'Erreur lors du chargement du profil utilisateur.' });
   }
 
   if (!user) {
