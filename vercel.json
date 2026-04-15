@@ -6,8 +6,6 @@
   "framework": null,
   "functions": {
     "api/index.mjs": {
-      "memory": 1024,
-      "maxDuration": 60,
       "includeFiles": "backend/node_modules/.prisma/**"
     }
   },

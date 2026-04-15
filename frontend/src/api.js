@@ -16,9 +16,22 @@ export async function api(url, options = {}) {
     ...options.headers,
   };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(API_BASE + url, { ...options, headers });
+  let res;
+  try {
+    res = await fetch(API_BASE + url, { ...options, headers });
+  } catch (e) {
+    const msg = e?.message || '';
+    throw new Error(
+      msg.includes('Failed to fetch') || msg.includes('NetworkError')
+        ? 'Impossible de joindre le serveur (réseau ou API). Vérifiez l’URL de l’API et le déploiement Vercel.'
+        : msg || 'Erreur réseau'
+    );
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText || 'Erreur réseau');
+  if (!res.ok) {
+    const detail = data.error || data.message || res.statusText;
+    throw new Error(detail || `Erreur ${res.status}`);
+  }
   return data;
 }
 

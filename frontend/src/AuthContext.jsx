@@ -23,10 +23,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
-    const { token, user: u } = await authApi.login(email, password);
-    setToken(token);
-    setUser(u);
-    return u;
+    try {
+      const { token, user: u } = await authApi.login(email, password);
+      setToken(token);
+      setUser(u);
+      return u;
+    } catch (e) {
+      throw e instanceof Error ? e : new Error('Échec de la connexion');
+    }
   };
 
   const logout = () => {

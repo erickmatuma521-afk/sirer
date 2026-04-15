@@ -23,9 +23,26 @@ const corsOrigins = config.frontendUrls.length
   ? config.frontendUrls
   : ['http://localhost:5173'];
 
+function isAllowedCorsOrigin(origin) {
+  if (!origin) return true;
+  if (corsOrigins.includes(origin)) return true;
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (protocol !== 'http:' && protocol !== 'https:') return false;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+    // Prévisualisations / déploiements Vercel (*.vercel.app) en plus du domaine de prod
+    if (hostname.endsWith('.vercel.app')) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 app.use(
   cors({
-    origin: corsOrigins.length === 1 ? corsOrigins[0] : corsOrigins,
+    origin: (origin, cb) => {
+      cb(null, isAllowedCorsOrigin(origin));
+    },
     credentials: true,
   })
 );

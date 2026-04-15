@@ -7,16 +7,38 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [statsError, setStatsError] = useState('');
+
+  const loadStats = () => {
+    setLoading(true);
+    setStatsError('');
+    dashboardApi.stats()
+      .then((s) => {
+        setStats(s);
+      })
+      .catch((e) => {
+        setStats(null);
+        setStatsError(e?.message || 'Erreur inconnue');
+      })
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    dashboardApi.stats()
-      .then(setStats)
-      .catch(() => setStats(null))
-      .finally(() => setLoading(false));
+    loadStats();
   }, []);
 
   if (loading) return <div>Chargement du tableau de bord…</div>;
-  if (!stats) return <div className="card">Impossible de charger les statistiques.</div>;
+  if (!stats) {
+    return (
+      <div className="card">
+        <p>Impossible de charger les statistiques.</p>
+        {statsError && <p className="login-error" style={{ marginTop: '0.5rem' }}>{statsError}</p>}
+        <button type="button" className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={loadStats}>
+          Réessayer
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
