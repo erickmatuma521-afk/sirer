@@ -280,6 +280,7 @@ router.patch(
     body('gradeId').optional({ values: 'falsy' }).isUUID(),
     body('isPaid').optional().isBoolean().toBoolean(),
     body('paymentAmount').optional({ values: 'falsy' }).isFloat().toFloat(),
+    body('documentsToDelete').optional().isArray(),
   ],
   async (req, res) => {
     const existing = await prisma.beneficiary.findUnique({ where: { id: req.params.id } });
@@ -308,21 +309,38 @@ router.patch(
     if (req.body.firstName !== undefined) updates.firstNameSearch = normalizeSearch(req.body.firstName);
     if (req.body.lastName !== undefined) updates.lastNameSearch = normalizeSearch(req.body.lastName);
 
-    if (req.body.documents && Array.isArray(req.body.documents) && req.body.documents.length > 0) {
-      updates.documents = {
-        create: req.body.documents.map(doc => ({
-          type: doc.type,
-          name: doc.name,
-          filePath: doc.filePath,
-        }))
-      };
-    }
+    const docsToDelete = Array.isArray(req.body.documentsToDelete)
+      ? req.body.documentsToDelete.map((t) => String(t || '').trim()).filter(Boolean)
+      : [];
+    const docsToCreate = Array.isArray(req.body.documents) ? req.body.documents : [];
+    const createTypes = docsToCreate.map((d) => d?.type).filter(Boolean);
+    const typesToClear = Array.from(new Set([...docsToDelete, ...createTypes]));
 
-    const updated = await prisma.beneficiary.update({
-      where: { id: req.params.id },
-      data: updates,
-      include: { province: true, grade: true },
+    const updated = await prisma.$transaction(async (tx) => {
+      if (typesToClear.length > 0) {
+        await tx.document.deleteMany({
+          where: { beneficiaryId: req.params.id, type: { in: typesToClear } },
+        });
+      }
+
+      const data = { ...updates };
+      if (docsToCreate.length > 0) {
+        data.documents = {
+          create: docsToCreate.map((doc) => ({
+            type: doc.type,
+            name: doc.name,
+            filePath: doc.filePath,
+          })),
+        };
+      }
+
+      return await tx.beneficiary.update({
+        where: { id: req.params.id },
+        data,
+        include: { province: true, grade: true, documents: true },
+      });
     });
+
     res.json(decryptBeneficiary(updated));
   }
 );

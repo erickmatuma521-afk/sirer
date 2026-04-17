@@ -20,6 +20,8 @@ export default function BeneficiaryForm() {
   const [gradesList, setGradesList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [existingDocuments, setExistingDocuments] = useState({}); // { [type]: true }
+  const [documentsToDelete, setDocumentsToDelete] = useState(new Set()); // types to delete on save
   const [form, setForm] = useState({
     nationalId: '',
     firstName: '',
@@ -45,11 +47,8 @@ export default function BeneficiaryForm() {
     paymentAmount: '',
     documents: {}, // Stores base64 for each type
   });
-  const [scanning, setScanning] = useState(false);
   const [fileInputKeys, setFileInputKeys] = useState({});
-  const [docMenuOpen, setDocMenuOpen] = useState(null); // doc.id or null
   const [scannerState, setScannerState] = useState(null); // { docId, status: 'scanning'|'success'|'error', message, imageData }
-  const fileInputRefs = useRef({});
 
   useEffect(() => {
     provinces.list().then(setProvincesList).catch(() => { });
@@ -59,6 +58,13 @@ export default function BeneficiaryForm() {
   useEffect(() => {
     if (!isEdit) return;
     api.get(id).then((b) => {
+      const docs = Array.isArray(b.documents) ? b.documents : [];
+      const existing = {};
+      for (const d of docs) {
+        if (d?.type) existing[d.type] = true;
+      }
+      setExistingDocuments(existing);
+      setDocumentsToDelete(new Set());
       setForm({
         nationalId: b.nationalId || '',
         firstName: b.firstName || '',
@@ -161,8 +167,38 @@ export default function BeneficiaryForm() {
   // ---- Scanner helpers ----
   const SCANNER_SERVICE_URL = 'http://localhost:18622'; // local companion scanner service
 
+  const handleAdministrativeDocFile = (docId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm((f) => ({ ...f, documents: { ...f.documents, [docId]: reader.result } }));
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleRemoveExistingDoc = (docId) => {
+    setExistingDocuments((prev) => {
+      const next = { ...prev };
+      delete next[docId];
+      return next;
+    });
+    setDocumentsToDelete((prev) => {
+      const next = new Set(prev);
+      next.add(docId);
+      return next;
+    });
+    setForm((f) => {
+      if (!f.documents?.[docId]) return f;
+      const nextDocs = { ...f.documents };
+      delete nextDocs[docId];
+      return { ...f, documents: nextDocs };
+    });
+    setFileInputKeys((prev) => ({ ...prev, [docId]: (prev[docId] ?? 0) + 1 }));
+  };
+
   const handleStartScan = async (docId) => {
-    setDocMenuOpen(null);
     setScannerState({ docId, status: 'scanning', message: 'Connexion au scanner en cours…', imageData: null });
     try {
       // 1. Check if service is reachable
@@ -241,6 +277,7 @@ export default function BeneficiaryForm() {
           isPaid: payload.isPaid,
           paymentAmount: payload.paymentAmount,
           documents: payload.documents,
+          documentsToDelete: Array.from(documentsToDelete),
         });
       } else {
         await api.create(payload);
@@ -341,107 +378,119 @@ export default function BeneficiaryForm() {
                   { id: 'PIECE_IDENTITE', label: 'Pièce d\'identité' },
                   { id: 'ACTE_NAISSANCE', label: 'Acte de naissance' },
                   { id: 'ATTESTATION_SCOLAIRE', label: 'Attestation de fréquentation scolaire /Académique' }
-                ].map(doc => {
-                  const isMenuOpen = docMenuOpen === doc.id;
+                ].map((doc) => {
+                  const k = fileInputKeys[doc.id] ?? 0;
+                  const hasExisting = Boolean(existingDocuments[doc.id]);
+                  const isLocked = isEdit && hasExisting;
                   return (
-                    <div key={doc.id} className="form-group" style={{ position: 'relative' }}>
-                      <label style={{ fontSize: '0.85rem' }}>{doc.label}</label>
+                    <div key={doc.id} className="form-group">
+                      <label style={{ fontSize: '0.85rem' }}>
+                        {doc.label}{' '}
+                        {isLocked && <span style={{ color: '#16a34a', fontWeight: 700 }}>• Déjà importé ✓</span>}
+                      </label>
 
-                      {/* Hidden file input */}
                       <input
-                        key={fileInputKeys[doc.id] ?? 0}
-                        ref={el => fileInputRefs.current[doc.id] = el}
-                        id={`file-input-${doc.id}`}
+                        key={`pc-${doc.id}-${k}`}
+                        id={`admin-doc-pc-${doc.id}`}
                         type="file"
                         accept="image/*,application/pdf"
                         style={{ display: 'none' }}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              setForm(f => ({ ...f, documents: { ...f.documents, [doc.id]: reader.result } }));
-                              setDocMenuOpen(null);
-                            };
-                            reader.readAsDataURL(file);
-                          } else {
-                            setDocMenuOpen(null);
-                          }
-                        }}
+                        onChange={(e) => handleAdministrativeDocFile(doc.id, e)}
+                        disabled={isLocked}
                       />
 
-                      {/* Dropdown toggle button */}
-                      <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '0.6rem',
+                          marginTop: '0.35rem',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <label
+                          htmlFor={`admin-doc-pc-${doc.id}`}
+                          className="btn btn-secondary"
+                          style={{
+                            fontSize: '0.85rem',
+                            padding: '0.4rem 0.6rem',
+                            cursor: isLocked ? 'not-allowed' : 'pointer',
+                            margin: 0,
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 42,
+                            height: 38,
+                            opacity: isLocked ? 0.55 : 1,
+                            pointerEvents: isLocked ? 'none' : 'auto',
+                          }}
+                          title="Ordinateur"
+                          aria-label="Ordinateur"
+                        >
+                          💻
+                        </label>
                         <button
                           type="button"
                           className="btn btn-secondary"
-                          style={{ fontSize: '0.85rem', padding: '0.3rem 0.7rem' }}
-                          onClick={() => setDocMenuOpen(isMenuOpen ? null : doc.id)}
+                          style={{
+                            fontSize: '0.85rem',
+                            padding: '0.4rem 0.6rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 42,
+                            height: 38,
+                            opacity: isLocked ? 0.55 : 1,
+                          }}
+                          onClick={() => handleStartScan(doc.id)}
+                          title="Scanner USB (service local SIRER sur PC)"
+                          aria-label="Scanner USB"
+                          disabled={isLocked}
                         >
-                          📂 Choisir un fichier ▾
+                          🖨️
                         </button>
-
-                        {/* Dropdown menu */}
-                        {isMenuOpen && (
-                          <div
+                        {isLocked && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => handleRemoveExistingDoc(doc.id)}
                             style={{
-                              position: 'absolute', top: '100%', left: 0, zIndex: 200,
-                              background: '#fff', border: '1px solid #ddd', borderRadius: 8,
-                              boxShadow: '0 4px 16px rgba(0,0,0,0.15)', minWidth: 180,
-                              overflow: 'hidden', marginTop: 4
+                              fontSize: '0.85rem',
+                              padding: '0.4rem 0.7rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              background: '#fff5f5',
+                              borderColor: '#fecaca',
+                              color: '#b91c1c',
+                              fontWeight: 700,
                             }}
+                            title="Supprimer le document pour pouvoir en importer un autre"
                           >
-                            <button
-                               type="button"
-                               style={{
-                                 display: 'flex', alignItems: 'center', gap: '0.6rem',
-                                 width: '100%', padding: '0.6rem 1rem', background: 'none',
-                                 border: 'none', cursor: 'pointer', fontSize: '0.9rem',
-                                 borderBottom: '1px solid #eee', textAlign: 'left'
-                               }}
-                               onMouseEnter={e => e.currentTarget.style.background = '#f5f7ff'}
-                               onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                               onClick={() => {
-                                 fileInputRefs.current[doc.id]?.click();
-                                 setDocMenuOpen(null);
-                               }}
-                            >
-                              💻 <span>
-                                <strong>Ordinateur</strong><br />
-                                <small style={{ color: '#888' }}>Parcourir vos fichiers</small>
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: '0.6rem',
-                                width: '100%', padding: '0.6rem 1rem', background: 'none',
-                                border: 'none', cursor: 'pointer', fontSize: '0.9rem', textAlign: 'left'
-                              }}
-                              onMouseEnter={e => e.currentTarget.style.background = '#f5f7ff'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                              onClick={() => handleStartScan(doc.id)}
-                            >
-                              🖨️ <span>
-                                <strong>Scanner</strong><br />
-                                <small style={{ color: '#888' }}>Numériser via scanner</small>
-                              </span>
-                            </button>
-                          </div>
+                            ✕ Supprimer
+                          </button>
                         )}
                       </div>
 
-                      {/* Loaded indicator */}
                       {form.documents[doc.id] && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.3rem' }}>
                           <span style={{ color: 'green', fontSize: '0.8rem' }}>Chargé ✓</span>
                           <button
                             type="button"
                             title="Supprimer ce document"
-                            style={{ background: 'none', border: 'none', color: 'red', cursor: 'pointer', fontSize: '1.1rem', padding: 0, lineHeight: 1 }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'red',
+                              cursor: 'pointer',
+                              fontSize: '1.1rem',
+                              padding: 0,
+                              lineHeight: 1,
+                            }}
                             onClick={() => {
-                              setFileInputKeys(prev => ({ ...prev, [doc.id]: (prev[doc.id] ?? 0) + 1 }));
-                              setForm(f => {
+                              setFileInputKeys((prev) => ({ ...prev, [doc.id]: (prev[doc.id] ?? 0) + 1 }));
+                              setForm((f) => {
                                 const newDocs = { ...f.documents };
                                 delete newDocs[doc.id];
                                 return { ...f, documents: newDocs };
@@ -586,13 +635,6 @@ export default function BeneficiaryForm() {
           </div>
         </form>
       </div>
-      {/* Close dropdown if clicking outside */}
-      {docMenuOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 100 }}
-          onClick={() => setDocMenuOpen(null)}
-        />
-      )}
 
       {/* ===== Scanner Modal ===== */}
       {scannerState && (
@@ -642,7 +684,12 @@ export default function BeneficiaryForm() {
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setScannerState(null)}>Fermer</button>
-                  <label htmlFor={`file-input-${scannerState.docId}`} className="btn btn-secondary" style={{ cursor: 'pointer' }} onClick={() => setScannerState(null)}>
+                  <label
+                    htmlFor={`admin-doc-pc-${scannerState.docId}`}
+                    className="btn btn-secondary"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setScannerState(null)}
+                  >
                     📁 Choisir un fichier
                   </label>
                   <button type="button" className="btn btn-primary"
